@@ -75,12 +75,37 @@ export default {
       this.controls.update();
 
       this.Update();
+
+      this.GetGeoJson();
     },
     Update() {
       requestAnimationFrame(this.Update);
       this.renderer.render(this.scene, this.camera);
       this.controls.update();
     },
+
+    GetGeoJson() {
+      fetch("./assets/zhengzhou.geojson").then((res) => {
+        res.json().then((data) => {
+          this.LoadBuilding(data);
+        });
+      });
+    },
+
+    LoadBuilding(data) {
+      let features = data.features;
+      for (let i = 0; i < features.length; i++) {
+        let fel = features[i];
+        if (!fel["properties"]) return;
+        if (fel.properties["building"]) {
+          this.addBuilding();
+        }
+      }
+    },
+
+    addBuilding() {
+      
+    }
   },
   mounted() {
     this.Awake();
