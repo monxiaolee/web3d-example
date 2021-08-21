@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 <template>
   <div class="map">
     <div id="content"></div>
@@ -7,6 +8,9 @@
 <script>
 import * as THREE from "three";
 import { MapControls } from "three/examples/jsm/controls/OrbitControls";
+import * as GEOLIB from "geolib";
+// const api =
+//   "https://gistcdn.githack.com/isjeffcom/a611e99aa888534f67cc2f6273a8d594/raw/9dbb086197c344c860217826c59d8a70d33dcb54/gistfile1.txt";
 export default {
   name: "Map",
   data() {
@@ -15,6 +19,10 @@ export default {
       camera: null,
       renderer: null,
       controls: null,
+      center: [113.6786766, 34.7706888],
+      // center: [-3.188822, 55.943686],
+
+      MAT_BUILDING: null,
     };
   },
   methods: {
@@ -53,10 +61,10 @@ export default {
       );
       this.scene.add(gh);
 
-      let geometry = new THREE.BoxGeometry(1, 1, 1);
-      let material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-      let cube = new THREE.Mesh(geometry, material);
-      this.scene.add(cube);
+      // let geometry = new THREE.BoxGeometry(1, 1, 1);
+      // let material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      // let cube = new THREE.Mesh(geometry, material);
+      // this.scene.add(cube);
 
       // 初始化渲染器
       this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -75,6 +83,7 @@ export default {
       this.controls.update();
 
       this.Update();
+      this.MAT_BUILDING = new THREE.MeshPhongMaterial(); // MeshPhongMaterial 白模反光材质
 
       this.GetGeoJson();
     },
@@ -90,22 +99,90 @@ export default {
           this.LoadBuilding(data);
         });
       });
+
+      // fetch(api).then((res) => {
+      //   res.json().then((data) => {
+      //     this.LoadBuilding(data);
+      //   });
+      // });
     },
 
     LoadBuilding(data) {
       let features = data.features;
+
       for (let i = 0; i < features.length; i++) {
         let fel = features[i];
         if (!fel["properties"]) return;
+
         if (fel.properties["building"]) {
-          this.addBuilding();
+          this.addBuilding(
+            fel.geometry.coordinates,
+            fel.properties,
+            fel.properties["building:levels"]
+          );
         }
       }
     },
 
-    addBuilding() {
-      
-    }
+    addBuilding(data, info, height = 1) {
+      // data 点阵数据；info 建筑数据； height 高度
+      // console.log(data, info, height);
+      height = height ? height : 1;
+
+      for (let i = 0; i < data.length; i++) {
+        let el = data[i];
+
+        let shape = this.genShape(el, this.center);
+        let geometry = this.genGeometry(shape, {
+          curveSegments: 1,
+          depth: 0.05 * height,
+          bevelEnabled: false,
+        });
+
+        geometry.rotateX(Math.PI / 2);
+        geometry.rotateZ(Math.PI);
+
+        let mesh = new THREE.Mesh(geometry, this.MAT_BUILDING);
+        this.scene.add(mesh);
+      }
+    },
+    genShape(points, center) {
+      let shape = new THREE.Shape();
+
+      for (let i = 0; i < points.length; i++) {
+        let elp = points[i];
+        elp = this.GPSRelativePosition(elp, center);
+
+        if (i == 0) {
+          shape.moveTo(elp[0], elp[1]);
+        } else {
+          shape.lineTo(elp[0], elp[1]);
+        }
+      }
+      return shape;
+    },
+    genGeometry(shape, config) {
+      let geometry = new THREE.ExtrudeBufferGeometry(shape, config);
+      geometry.computeBoundingBox();
+
+      return geometry;
+    },
+    GPSRelativePosition(objPosi, centerPosi) {
+      // Get GPS distance
+      let dis = GEOLIB.getDistance(objPosi, centerPosi);
+
+      // Get bearing angle
+      let bearing = GEOLIB.getRhumbLineBearing(objPosi, centerPosi);
+
+      // Calculate X by centerPosi.x + distance * cos(rad)
+      let x = centerPosi[0] + dis * Math.cos((bearing * Math.PI) / 180);
+
+      // Calculate Y by centerPosi.y + distance * sin(rad)
+      let y = centerPosi[1] + dis * Math.sin((bearing * Math.PI) / 180);
+
+      // Reverse X (it work)
+      return [-x / 100, y / 100];
+    },
   },
   mounted() {
     this.Awake();
